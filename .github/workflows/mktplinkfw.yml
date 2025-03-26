@@ -25,7 +25,7 @@ jobs:
         sudo apt install -y build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev \
           patch unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full \
           msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint \
-          device-tree-compiler tzdata python3-pyelftools python3-dev mktplinkfw
+          device-tree-compiler tzdata python3-pyelftools python3-dev
         sudo apt autoremove --purge -y
         sudo apt clean
 
@@ -68,17 +68,25 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/immortalwrt
         make -j$(nproc) V=s
-    
+
+    - name: Build mktplinkfw from Source
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone https://github.com/openwrt-mirror/uboot-mktplinkfw.git
+        cd uboot-mktplinkfw/tools
+        make
+        sudo cp mktplinkfw /usr/local/bin/
+
     - name: Manually Create Breed Factory File
       run: |
         cd $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/
         mktplinkfw -o r3p-breed-factory.bin -B xiaomi-r3p -k *-kernel.bin -r *-rootfs.bin
-    
+
     - name: Debug Firmware Output
       run: |
         echo "Checking firmware output directory..."
         ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/
-    
+
     - name: Upload All Firmware Artifacts
       uses: actions/upload-artifact@v4
       with:
