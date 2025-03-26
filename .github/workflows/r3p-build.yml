@@ -3,10 +3,10 @@ name: Build for R3P
 on:
   push:
     branches:
-      - eoleun
+      - main
   pull_request:
     branches:
-      - eoleun
+      - main
   workflow_dispatch:
 
 jobs:
@@ -43,17 +43,14 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Apply Custom Configuration
+      - name: Generate Default Configuration
         run: |
-          cp config/r3p-config .config openwrt/.config
-          mkdir -p openwrt/files/etc/config
-          cp config/network openwrt/files/etc/config/network
-          cp config/wireless openwrt/files/etc/config/wireless
+          cd openwrt
+          make defconfig
 
       - name: Start Build Process
         run: |
           cd openwrt
-          make defconfig
           make -j$(nproc) V=s
 
       - name: Upload Firmware Artifacts
