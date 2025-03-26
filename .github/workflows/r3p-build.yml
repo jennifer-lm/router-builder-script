@@ -6,7 +6,7 @@ on:
       - r3p
   pull_request:
     branches:
-      - r3p
+      - main
   workflow_dispatch:
 
 jobs:
