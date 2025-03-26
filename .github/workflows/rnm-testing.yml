@@ -53,6 +53,7 @@ jobs:
         CONFIG_TARGET_ramips_mt7621=y
         CONFIG_TARGET_ramips_mt7621_DEVICE_xiaomi_mir3p=y
         CONFIG_TARGET_IMAGES_GZIP=y
+        CONFIG_TARGET_IMAGES_BREED=y
         CONFIG_PACKAGE_luci-theme-argon=y
         CONFIG_PACKAGE_luci-app-argon-config=y
         CONFIG_PACKAGE_luci-mod-dashboard=y
@@ -66,11 +67,11 @@ jobs:
         cd $GITHUB_WORKSPACE/immortalwrt
         make -j$(nproc) V=s
     
-    - name: Upload Firmware Artifacts
+    - name: Upload All Firmware Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: firmware-r3p
-        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/
+        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/**
         retention-days: 7
   
   build-newifi-d2:
@@ -91,6 +92,7 @@ jobs:
         CONFIG_TARGET_ramips_mt7621=y
         CONFIG_TARGET_ramips_mt7621_DEVICE_d-team_newifi-d2=y
         CONFIG_TARGET_IMAGES_GZIP=y
+        CONFIG_TARGET_IMAGES_BREED=y
         CONFIG_PACKAGE_luci-theme-argon=y
         CONFIG_PACKAGE_luci-app-argon-config=y
         CONFIG_PACKAGE_luci-mod-dashboard=y
@@ -104,11 +106,11 @@ jobs:
         cd $GITHUB_WORKSPACE/immortalwrt
         make -j$(nproc) V=s
     
-    - name: Upload Firmware Artifacts
+    - name: Upload All Firmware Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: firmware-newifi-d2
-        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/
+        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/**
         retention-days: 7
   
   build-miwifi-mini:
@@ -129,6 +131,7 @@ jobs:
         CONFIG_TARGET_ramips_mt7620=y
         CONFIG_TARGET_ramips_mt7620_DEVICE_xiaomi_miwifi-mini=y
         CONFIG_TARGET_IMAGES_GZIP=y
+        CONFIG_TARGET_IMAGES_BREED=y
         CONFIG_PACKAGE_luci-theme-argon=y
         CONFIG_PACKAGE_luci-app-argon-config=y
         CONFIG_PACKAGE_luci-mod-dashboard=y
@@ -142,9 +145,9 @@ jobs:
         cd $GITHUB_WORKSPACE/immortalwrt
         make -j$(nproc) V=s
     
-    - name: Upload Firmware Artifacts
+    - name: Upload All Firmware Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: firmware-miwifi-mini
-        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7620/
+        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7620/**
         retention-days: 7
