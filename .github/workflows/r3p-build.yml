@@ -3,10 +3,10 @@ name: Build for R3P
 on:
   push:
     branches:
-      - main
+      - r3p
   pull_request:
     branches:
-      - main
+      - r3p
   workflow_dispatch:
 
 jobs:
@@ -27,15 +27,13 @@ jobs:
 
       - name: Clone ImmortalWrt Source Code
         run: |
-          git clone --depth=1 --branch v24.10.0 https://github.com/immortalwrt/immortalwrt.git openwrt
-          cd openwrt
+          git clone --depth=1 --branch r3p https://github.com/immortalwrt/immortalwrt.git openwrt
 
       - name: Add Custom Packages
         run: |
           cd openwrt/package
           git clone https://github.com/jerrykuku/luci-theme-argon.git
           git clone https://github.com/jerrykuku/luci-app-argon-config.git
-          cd ../
 
       - name: Update and Install Feeds
         run: |
@@ -43,19 +41,19 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Generate Default Configuration
+      - name: Apply Custom Configuration
         run: |
-          cd openwrt
-          make defconfig
+          cp config/.config openwrt/.config
 
       - name: Start Build Process
         run: |
           cd openwrt
+          make defconfig
           make -j$(nproc) V=s
 
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: firmware
-          path: openwrt/bin/targets/ramips/mt7621/
+          path: openwrt/bin/targets/
           retention-days: 7
