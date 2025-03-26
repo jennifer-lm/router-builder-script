@@ -57,5 +57,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: firmware
-          path: openwrt/bin/targets/ramips/mt7621/
+          path: openwrt/bin/
           retention-days: 7
