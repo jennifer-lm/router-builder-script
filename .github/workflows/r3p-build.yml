@@ -3,7 +3,7 @@ name: Build for R3P
 on:
   push:
     branches:
-      - r3p
+      - main
   pull_request:
     branches:
       - main
