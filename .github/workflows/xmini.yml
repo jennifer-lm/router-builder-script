@@ -3,10 +3,10 @@ name: Build for Xiaomi Mini
 on:
   push:
     branches:
-      - main
+      - xmini
   pull_request:
     branches:
-      - main
+      - xmini
   workflow_dispatch:
 
 jobs:
