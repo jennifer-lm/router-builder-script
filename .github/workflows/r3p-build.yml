@@ -27,8 +27,7 @@ jobs:
 
       - name: Clone ImmortalWrt Source Code
         run: |
-          git clone --depth=1 --branch r3p https://github.com/immortalwrt/immortalwrt.git openwrt
-
+          git clone --depth=1 --branch v24.10.0 https://github.com/immortalwrt/immortalwrt.git openwrt
       - name: Add Custom Packages
         run: |
           cd openwrt/package
