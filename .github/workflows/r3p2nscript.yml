@@ -13,7 +13,6 @@ on:
 
 jobs:
   build-ramips-mt7621:
-    if: contains(github.ref, 'tags/v')
     runs-on: ubuntu-20.04
 
     steps:
