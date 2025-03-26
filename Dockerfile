@@ -12,7 +12,7 @@ RUN apt update && apt install -y \
 # Clone ImmortalWrt repository and checkout specified branch
 RUN git clone https://github.com/immortalwrt/immortalwrt.git /openwrt && \
     cd /openwrt && \
-    git checkout 24.10.0
+    git checkout v24.10.0
 
 # Install additional packages
 RUN cd /openwrt/package && \
@@ -24,8 +24,10 @@ RUN cd /openwrt && \
     ./scripts/feeds update -a && \
     ./scripts/feeds install -a
 
-# Copy configuration file
-COPY /r3p-config/.config /openwrt/.config
+# Copy configuration files
+COPY config/.config /openwrt/.config
+COPY config/network /openwrt/files/etc/config/network
+COPY config/wireless /openwrt/files/etc/config/wireless
 
 # Set working directory
 WORKDIR /openwrt
@@ -35,7 +37,8 @@ RUN make defconfig && make -j$(nproc) V=s
 
 # Copy firmware to output directory
 RUN mkdir -p /output && \
-    cp bin/targets/ramips/mt7621/*.bin /output/
+    cp bin/targets/ramips/mt7621/*kernel.bin /output/ && \
+    cp bin/targets/ramips/mt7621/*sysupgrade.bin /output/
 
 # Define output volume
 VOLUME [ "/output" ]
