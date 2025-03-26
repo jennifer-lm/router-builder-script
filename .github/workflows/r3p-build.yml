@@ -32,25 +32,23 @@ jobs:
 
     - name: Clone ImmortalWrt Source Code
       run: |
-        mkdir -p /mnt/work
-        cd /mnt/work
-        git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git
+        git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git $GITHUB_WORKSPACE/immortalwrt
 
     - name: Add Custom Packages
       run: |
-        cd /mnt/work/immortalwrt/package
+        cd $GITHUB_WORKSPACE/immortalwrt/package
         git clone https://github.com/jerrykuku/luci-theme-argon.git
         git clone https://github.com/jerrykuku/luci-app-argon-config.git
 
     - name: Update and Install Feeds
       run: |
-        cd /mnt/work/immortalwrt
+        cd $GITHUB_WORKSPACE/immortalwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
     - name: Configure Build for R3P
       run: |
-        cd /mnt/work/immortalwrt
+        cd $GITHUB_WORKSPACE/immortalwrt
         cat >> .config <<EOF
         CONFIG_TARGET_ramips=y
         CONFIG_TARGET_ramips_mt7621=y
@@ -66,19 +64,19 @@ jobs:
 
     - name: Start Build Process
       run: |
-        cd /mnt/work/immortalwrt
+        cd $GITHUB_WORKSPACE/immortalwrt
         make -j$(nproc) V=s
 
     - name: Verify Build Output
       run: |
         echo "Checking firmware output directories..."
-        ls -lah /mnt/work/immortalwrt/bin/targets/ || true
-        ls -lah /mnt/work/immortalwrt/bin/targets/ramips/ || true
-        ls -lah /mnt/work/immortalwrt/bin/targets/ramips/mt7621/ || true
+        ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ || true
+        ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/ || true
+        ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/ || true
 
     - name: Upload Firmware Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: firmware-r3p
-        path: /mnt/work/immortalwrt/bin/targets/ramips/mt7621/
+        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/
         retention-days: 7
