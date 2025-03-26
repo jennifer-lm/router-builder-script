@@ -12,40 +12,39 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-r3p:
     runs-on: ubuntu-20.04
-
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-
+    
     - name: Prepare Environment
       run: |
         docker rmi $(docker images -q) || true
         sudo apt update
-        sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
-          gettext git libncurses5-dev libssl-dev python3 python3-venv python3-pip rsync unzip zlib1g-dev \
-          file wget curl time sudo asciidoc binutils bzip2 patch subversion flex uglifyjs p7zip-full msmtp \
-          texinfo xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler tzdata
+        sudo apt install -y build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev \
+          patch unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full \
+          msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint \
+          device-tree-compiler tzdata python3-pyelftools python3-dev
         sudo apt autoremove --purge -y
         sudo apt clean
 
     - name: Clone ImmortalWrt Source Code
       run: |
         git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git $GITHUB_WORKSPACE/immortalwrt
-
+    
     - name: Add Custom Packages
       run: |
         cd $GITHUB_WORKSPACE/immortalwrt/package
         git clone https://github.com/jerrykuku/luci-theme-argon.git
         git clone https://github.com/jerrykuku/luci-app-argon-config.git
-
+    
     - name: Update and Install Feeds
       run: |
         cd $GITHUB_WORKSPACE/immortalwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-
+    
     - name: Configure Build for R3P
       run: |
         cd $GITHUB_WORKSPACE/immortalwrt
@@ -54,6 +53,12 @@ jobs:
         CONFIG_TARGET_ramips_mt7621=y
         CONFIG_TARGET_ramips_mt7621_DEVICE_xiaomi_mir3p=y
         CONFIG_TARGET_IMAGES_GZIP=y
+        CONFIG_TARGET_IMAGES_BREED=y
+        CONFIG_TARGET_ROOTFS_INITRAMFS=y
+        CONFIG_TARGET_ROOTFS_SQUASHFS=y
+        CONFIG_TARGET_KERNEL_PARTSIZE=8
+        CONFIG_TARGET_ROOTFS_PARTSIZE=256
+        CONFIG_IMAGEOPT=y
         CONFIG_PACKAGE_luci-theme-argon=y
         CONFIG_PACKAGE_luci-app-argon-config=y
         CONFIG_PACKAGE_luci-mod-dashboard=y
@@ -61,22 +66,20 @@ jobs:
         CONFIG_PACKAGE_luci-app-adblock=y
         EOF
         make defconfig
-
+    
     - name: Start Build Process
       run: |
         cd $GITHUB_WORKSPACE/immortalwrt
         make -j$(nproc) V=s
-
-    - name: Verify Build Output
+    
+    - name: Debug Firmware Output
       run: |
         echo "Checking firmware output directories..."
-        ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ || true
-        ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/ || true
-        ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/ || true
-
-    - name: Upload Firmware Artifacts
+        ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/
+    
+    - name: Upload All Firmware Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: firmware-r3p
-        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/
+        name: firmware-r3p-all
+        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/**
         retention-days: 7
