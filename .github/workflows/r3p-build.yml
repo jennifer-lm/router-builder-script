@@ -2,55 +2,45 @@ name: Build for R3P
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  build-ramips-mt7621:
-    if: contains(github.ref, 'tags/v')
+  build:
     runs-on: ubuntu-20.04
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Pre Initialization environment
+    - name: Prepare Environment
       run: |
-        docker rmi `docker images -q`
-        sudo -E df -h
-        sudo ls -lh /mnt
-
-    - name: Initialization environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        echo "Cleaning up unnecessary files..."
-        sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php
-        sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* mysql* php*
-        sudo -E apt-get update
-        sudo -E apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev \
-          patch unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full \
-          msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint \
-          device-tree-compiler tzdata python3-pyelftools python3-dev
-        sudo -E apt-get -y autoremove --purge
-        sudo -E apt-get clean
-
-    - name: Clean up disk
-      run: sudo rm -rf /opt/*
+        docker rmi $(docker images -q) || true
+        sudo apt update
+        sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+          gettext git libncurses5-dev libssl-dev python3 python3-venv python3-pip rsync unzip zlib1g-dev \
+          file wget curl time sudo asciidoc binutils bzip2 patch subversion flex uglifyjs p7zip-full msmtp \
+          texinfo xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler tzdata
+        sudo apt autoremove --purge -y
+        sudo apt clean
 
     - name: Clone ImmortalWrt Source Code
       run: |
-        sudo -E mkdir /mnt/work
-        sudo -E chmod 777 /mnt/work
-        git clone --depth 1 https://github.com/immortalwrt/immortalwrt.git /mnt/work/immortalwrt
+        mkdir -p /mnt/work
+        cd /mnt/work
+        git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git
 
     - name: Add Custom Packages
       run: |
         cd /mnt/work/immortalwrt/package
         git clone https://github.com/jerrykuku/luci-theme-argon.git
         git clone https://github.com/jerrykuku/luci-app-argon-config.git
-        cd ../
 
     - name: Update and Install Feeds
       run: |
@@ -61,34 +51,34 @@ jobs:
     - name: Configure Build for R3P
       run: |
         cd /mnt/work/immortalwrt
-        make menuconfig
-        echo 'CONFIG_TARGET_ramips=y' >> .config
-        echo 'CONFIG_TARGET_ramips_mt7621=y' >> .config
-        echo 'CONFIG_TARGET_ramips_mt7621_DEVICE_xiaomi_mir3p=y' >> .config
-        echo 'CONFIG_TARGET_IMAGES_GZIP=y' >> .config
-        echo 'CONFIG_PACKAGE_luci-theme-argon=y' >> .config
-        echo 'CONFIG_PACKAGE_luci-app-argon-config=y' >> .config
-        echo 'CONFIG_PACKAGE_luci-mod-dashboard=y' >> .config
-        echo 'CONFIG_PACKAGE_adblock=y' >> .config
-        echo 'CONFIG_PACKAGE_luci-app-adblock=y' >> .config
+        cat >> .config <<EOF
+        CONFIG_TARGET_ramips=y
+        CONFIG_TARGET_ramips_mt7621=y
+        CONFIG_TARGET_ramips_mt7621_DEVICE_xiaomi_mir3p=y
+        CONFIG_TARGET_IMAGES_GZIP=y
+        CONFIG_PACKAGE_luci-theme-argon=y
+        CONFIG_PACKAGE_luci-app-argon-config=y
+        CONFIG_PACKAGE_luci-mod-dashboard=y
+        CONFIG_PACKAGE_adblock=y
+        CONFIG_PACKAGE_luci-app-adblock=y
+        EOF
         make defconfig
 
     - name: Start Build Process
       run: |
         cd /mnt/work/immortalwrt
-        echo -e "$(nproc) thread build."
         make -j$(nproc) V=s
 
-    - name: Debug Firmware Path
+    - name: Verify Build Output
       run: |
         echo "Checking firmware output directories..."
-        ls -lah /mnt/work/immortalwrt/bin/targets/
-        ls -lah /mnt/work/immortalwrt/bin/targets/ramips/
-        ls -lah /mnt/work/immortalwrt/bin/targets/ramips/mt7621/
+        ls -lah /mnt/work/immortalwrt/bin/targets/ || true
+        ls -lah /mnt/work/immortalwrt/bin/targets/ramips/ || true
+        ls -lah /mnt/work/immortalwrt/bin/targets/ramips/mt7621/ || true
 
     - name: Upload Firmware Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: firmware-r3p
-        path: /mnt/work/immortalwrt/bin/targets/**/
+        path: /mnt/work/immortalwrt/bin/targets/ramips/mt7621/
         retention-days: 7
