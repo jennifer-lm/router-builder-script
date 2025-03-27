@@ -92,20 +92,22 @@ jobs:
           cd openwrt/bin/targets/*/*
           if [ -f *-initramfs-kernel.bin ] && [ -f *-squashfs-sysupgrade.bin ]; then
             echo "firmware_found=true" >> $GITHUB_ENV
+            echo "firmware_found=true" >> $GITHUB_OUTPUT
           else
             echo "firmware_found=false" >> $GITHUB_ENV
+            echo "firmware_found=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Upload firmware
         uses: actions/upload-artifact@main
-        if: env.firmware_found == 'true'
+        if: steps.check_files.outputs.firmware_found == 'true'
         with:
           name: Xiaomi-3P-Firmware
           path: openwrt/bin/targets/*/*
 
   build_breed:
     needs: compile_firmware
-    if: env.firmware_found == 'true'
+    if: needs.compile_firmware.outputs.firmware_found == 'true'
     runs-on: ubuntu-20.04
     steps:
       - name: Generate Breed Factory File
@@ -121,7 +123,7 @@ jobs:
 
   release:
     needs: [compile_firmware, build_breed]
-    if: env.firmware_found == 'true'
+    if: needs.compile_firmware.outputs.firmware_found == 'true'
     runs-on: ubuntu-20.04
     steps:
       - name: Create GitHub release
