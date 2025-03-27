@@ -1,85 +1,98 @@
 name: Build for R3P
 
 on:
+  release:
+    types: [published]
   push:
     branches:
-      - main
-    tags:
-      - 'v*'
-  pull_request:
-    branches:
-      - main
+      - master
+  repository_dispatch:
   workflow_dispatch:
+    inputs:
+      ssh:
+        description: "Enable SSH for debugging"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: master
+  CONFIG_FILE: .config-3P
+  TZ: Asia/Ho_Chi_Minh
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  build-r3p:
+  build:
     runs-on: ubuntu-20.04
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-    
-    - name: Prepare Environment
-      run: |
-        docker rmi $(docker images -q) || true
-        sudo apt update
-        sudo apt install -y build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev \
-          patch unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full \
-          msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint \
-          device-tree-compiler tzdata python3-pyelftools python3-dev
-        sudo apt autoremove --purge -y
-        sudo apt clean
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Clone ImmortalWrt Source Code
-      run: |
-        git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git $GITHUB_WORKSPACE/immortalwrt
-    
-    - name: Add Custom Packages
-      run: |
-        cd $GITHUB_WORKSPACE/immortalwrt/package
-        git clone https://github.com/jerrykuku/luci-theme-argon.git
-        git clone https://github.com/jerrykuku/luci-app-argon-config.git
-    
-    - name: Update and Install Feeds
-      run: |
-        cd $GITHUB_WORKSPACE/immortalwrt
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-    
-    - name: Configure Build for R3P
-      run: |
-        cd $GITHUB_WORKSPACE/immortalwrt
-        cat >> .config <<EOF
-        CONFIG_TARGET_ramips=y
-        CONFIG_TARGET_ramips_mt7621=y
-        CONFIG_TARGET_ramips_mt7621_DEVICE_xiaomi_mir3p=y
-        CONFIG_TARGET_IMAGES_GZIP=y
-        CONFIG_TARGET_IMAGES_BREED=y
-        CONFIG_TARGET_ROOTFS_INITRAMFS=y
-        CONFIG_TARGET_ROOTFS_SQUASHFS=y
-        CONFIG_TARGET_KERNEL_PARTSIZE=8
-        CONFIG_TARGET_ROOTFS_PARTSIZE=256
-        CONFIG_IMAGEOPT=y
-        CONFIG_PACKAGE_luci-theme-argon=y
-        CONFIG_PACKAGE_luci-app-argon-config=y
-        CONFIG_PACKAGE_luci-mod-dashboard=y
-        CONFIG_PACKAGE_adblock=y
-        CONFIG_PACKAGE_luci-app-adblock=y
-        EOF
-        make defconfig
-    
-    - name: Start Build Process
-      run: |
-        cd $GITHUB_WORKSPACE/immortalwrt
-        make -j$(nproc) V=s
-    
-    - name: Debug Firmware Output
-      run: |
-        echo "Checking firmware output directories..."
-        ls -lah $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/
-    
-    - name: Upload All Firmware Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: firmware-r3p-all
-        path: $GITHUB_WORKSPACE/immortalwrt/bin/targets/ramips/mt7621/**
-        retention-days: 7
+      - name: Setup Build Environment
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential binutils bzip2 gawk gettext git \
+            libncurses5-dev libz-dev patch unzip zlib1g-dev flex upx libelf-dev \
+            autoconf automake libtool device-tree-compiler python3
+
+      - name: Clone ImmortalWrt
+        run: |
+          git clone --depth=1 $REPO_URL -b $REPO_BRANCH openwrt
+          ln -sf openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Load Custom Configuration
+        run: |
+          cp $CONFIG_FILE openwrt/.config
+
+      - name: Compile Firmware
+        run: |
+          cd openwrt
+          make defconfig
+          make download -j$(nproc)
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Check and Upload Initial Firmware Files
+        run: |
+          cd openwrt/bin/targets/*/*
+          echo "Checking firmware files..."
+          ls -lh
+          
+          # Check if required files exist
+          if [ -f *-initramfs-kernel.bin ] && [ -f *-squashfs-sysupgrade.bin ]; then
+            echo "Uploading initial firmware files..."
+            mkdir -p firmware_upload
+            cp *-initramfs-kernel.bin *-squashfs-sysupgrade.bin firmware_upload/
+          else
+            echo "Error: Required firmware files not found!"
+            exit 1
+          fi
+
+      - name: Upload Initial Firmware Files as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiaomi-R3P-Initial-Firmware
+          path: openwrt/bin/targets/*/*/*-initramfs-kernel.bin
+          path: openwrt/bin/targets/*/*/*-squashfs-sysupgrade.bin
+
+      - name: Generate Breed Factory File
+        run: |
+          cd openwrt/bin/targets/*/*
+          echo "Generating r3p-breed-factory.bin..."
+          cat *-initramfs-kernel.bin *-squashfs-sysupgrade.bin > r3p-breed-factory.bin
+          ls -lh r3p-breed-factory.bin
+
+      - name: Upload Final Firmware Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiaomi-R3P-Full-Firmware
+          path: openwrt/bin/targets/*/*/*.bin
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: openwrt/bin/targets/*/*/*.bin
+          tag_name: ${{ github.event.release.tag_name }}
