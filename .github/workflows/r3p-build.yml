@@ -4,15 +4,7 @@ on:
   push:
     branches:
       - master
-  release:
-    types: [published]
-  repository_dispatch:
   workflow_dispatch:
-    inputs:
-      ssh:
-        description: "Enable SSH for debugging"
-        required: false
-        default: "false"
 
 permissions:
   contents: write
@@ -28,7 +20,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout source code
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         env:
@@ -41,6 +33,7 @@ jobs:
 
       - name: Clone ImmortalWRT
         run: |
+          mkdir -p openwrt
           git clone $REPO_URL -b $REPO_BRANCH openwrt
           ln -sf $(pwd)/openwrt $GITHUB_WORKSPACE/openwrt
 
@@ -48,6 +41,9 @@ jobs:
     needs: setup
     runs-on: ubuntu-20.04
     steps:
+      - name: Ensure openwrt directory exists
+        run: mkdir -p openwrt
+
       - name: Generate .config-3P
         run: |
           cat << EOF > openwrt/.config
@@ -62,6 +58,9 @@ jobs:
           CONFIG_PACKAGE_ppp-mod-pppoe=y
           CONFIG_PACKAGE_wpad-basic=y
           EOF
+
+      - name: Verify .config file
+        run: cat openwrt/.config
 
       - name: Update and install feeds
         run: |
@@ -99,7 +98,7 @@ jobs:
           fi
 
       - name: Upload firmware
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         if: steps.check_files.outputs.firmware_found == 'true'
         with:
           name: Xiaomi-3P-Firmware
@@ -116,40 +115,7 @@ jobs:
           cat *-initramfs-kernel.bin *-squashfs-sysupgrade.bin > r3p-breed-factory.bin
 
       - name: Upload Breed Factory File
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: R3P-Breed-Factory
           path: openwrt/bin/targets/*/*/r3p-breed-factory.bin
-
-  release:
-    needs: [compile_firmware, build_breed]
-    if: needs.compile_firmware.outputs.firmware_found == 'true'
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.run_id }}
-          name: "Xiaomi R3P Firmware - ${{ github.run_id }}"
-          files: |
-            openwrt/bin/targets/*/*/*
-          draft: false
-          prerelease: false
-
-      - name: Cleanup old releases
-        uses: dev-drprasad/delete-older-releases@v0.3.4
-        with:
-          keep_latest: 3
-          delete_tags: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  debug_ssh:
-    needs: setup
-    if: github.event.inputs.ssh == 'true'
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Enable SSH for debugging
-        uses: P3TERX/ssh2actions@v1.0.0
