@@ -1,11 +1,11 @@
 name: Build for R3P
 
 on:
-  release:
-    types: [published]
   push:
     branches:
       - master
+  release:
+    types: [published]
   repository_dispatch:
   workflow_dispatch:
     inputs:
@@ -20,79 +20,134 @@ permissions:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: master
-  CONFIG_FILE: .config-3P
   TZ: Asia/Ho_Chi_Minh
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  build:
+  setup:
     runs-on: ubuntu-20.04
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@main
 
-      - name: Setup Build Environment
+      - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt update
-          sudo apt install -y build-essential binutils bzip2 gawk gettext git \
-            libncurses5-dev libz-dev patch unzip zlib1g-dev flex upx libelf-dev \
-            autoconf automake libtool device-tree-compiler python3
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential cmake flex git gawk gettext \
+              libncurses5-dev libssl-dev python3 python3-pip unzip zlib1g-dev
+          sudo timedatectl set-timezone "$TZ"
 
-      - name: Clone ImmortalWrt
+      - name: Clone ImmortalWRT
         run: |
-          git clone --depth=1 $REPO_URL -b $REPO_BRANCH openwrt
-          ln -sf openwrt $GITHUB_WORKSPACE/openwrt
+          git clone $REPO_URL -b $REPO_BRANCH openwrt
+          ln -sf $(pwd)/openwrt $GITHUB_WORKSPACE/openwrt
 
-      - name: Load Custom Configuration
+  configure:
+    needs: setup
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Generate .config-3P
         run: |
-          cp $CONFIG_FILE openwrt/.config
+          cat << EOF > openwrt/.config
+          CONFIG_TARGET_ramips=y
+          CONFIG_TARGET_ramips_mt7621=y
+          CONFIG_TARGET_ramips_mt7621_DEVICE_xiaomi_mir3p=y
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-app-opkg=y
+          CONFIG_PACKAGE_luci-app-firewall=y
+          CONFIG_PACKAGE_luci-proto-ppp=y
+          CONFIG_PACKAGE_ppp=y
+          CONFIG_PACKAGE_ppp-mod-pppoe=y
+          CONFIG_PACKAGE_wpad-basic=y
+          EOF
 
-      - name: Compile Firmware
+      - name: Update and install feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Download packages
         run: |
           cd openwrt
           make defconfig
           make download -j$(nproc)
-          make -j$(nproc) || make -j1 V=s
+          find dl -size -1024c -exec rm -f {} \;
 
-      - name: Check and Upload Initial Firmware Files
+  compile_firmware:
+    needs: configure
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Compile OpenWrt firmware
+        id: compile
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j4 || make -j1 V=s
+
+      - name: Check firmware files
+        id: check_files
         run: |
           cd openwrt/bin/targets/*/*
-          echo "Checking firmware files..."
-          ls -lh
-          
-          # Check if required files exist
           if [ -f *-initramfs-kernel.bin ] && [ -f *-squashfs-sysupgrade.bin ]; then
-            echo "Uploading initial firmware files..."
-            mkdir -p firmware_upload
-            cp *-initramfs-kernel.bin *-squashfs-sysupgrade.bin firmware_upload/
+            echo "firmware_found=true" >> $GITHUB_ENV
           else
-            echo "Error: Required firmware files not found!"
-            exit 1
+            echo "firmware_found=false" >> $GITHUB_ENV
           fi
 
-      - name: Upload Initial Firmware Files as Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload firmware
+        uses: actions/upload-artifact@main
+        if: env.firmware_found == 'true'
         with:
-          name: Xiaomi-R3P-Initial-Firmware
-          path: openwrt/bin/targets/*/*/*-initramfs-kernel.bin
-          path: openwrt/bin/targets/*/*/*-squashfs-sysupgrade.bin
+          name: Xiaomi-3P-Firmware
+          path: openwrt/bin/targets/*/*
 
+  build_breed:
+    needs: compile_firmware
+    if: env.firmware_found == 'true'
+    runs-on: ubuntu-20.04
+    steps:
       - name: Generate Breed Factory File
         run: |
           cd openwrt/bin/targets/*/*
-          echo "Generating r3p-breed-factory.bin..."
           cat *-initramfs-kernel.bin *-squashfs-sysupgrade.bin > r3p-breed-factory.bin
-          ls -lh r3p-breed-factory.bin
 
-      - name: Upload Final Firmware Files
-        uses: actions/upload-artifact@v4
+      - name: Upload Breed Factory File
+        uses: actions/upload-artifact@main
         with:
-          name: Xiaomi-R3P-Full-Firmware
-          path: openwrt/bin/targets/*/*/*.bin
+          name: R3P-Breed-Factory
+          path: openwrt/bin/targets/*/*/r3p-breed-factory.bin
 
-      - name: Upload to Release
+  release:
+    needs: [compile_firmware, build_breed]
+    if: env.firmware_found == 'true'
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: openwrt/bin/targets/*/*/*.bin
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ github.run_id }}
+          name: "Xiaomi R3P Firmware - ${{ github.run_id }}"
+          files: |
+            openwrt/bin/targets/*/*/*
+          draft: false
+          prerelease: false
+
+      - name: Cleanup old releases
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 3
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  debug_ssh:
+    needs: setup
+    if: github.event.inputs.ssh == 'true'
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Enable SSH for debugging
+        uses: P3TERX/ssh2actions@v1.0.0
